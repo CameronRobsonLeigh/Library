@@ -1,0 +1,238 @@
+﻿@using Library_Bally.Models;
+@model dynamic
+
+@{
+    ViewBag.Title = "Home Page";
+    
+}
+<head>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+    <script src="https://kit.fontawesome.com/a076d05399.js"></script>
+    <script src="/Scripts/jquery-1.7.1.min.js"></script>
+    <script src="/Scripts/jquery-ui-1.8.20.min.js"></script>
+    <script src="/Scripts/jquery-1.7.1.js"></script>
+</head>
+<br />
+<table class="table table-bordered table-hover table-striped" style="width:100%">
+    <tr>
+        <th scope="col">Book ID </th>
+        <th scope="col">Book Name </th>
+        <th scope="col">Year </th>
+        <th scope="col">Price</th>
+        <th scope="col">Genre</th>
+        <th scope="col">Author</th>
+        <th scope="col">Add To Basket?</th>
+    </tr>
+    @foreach (Book book in Model.NonDiscountedBooks)
+    {
+        <tr>
+            <td>@book.BookID</td>
+            <td>@book.BookName</td>
+            <td>@book.Year</td>
+            <td>£@book.Price</td>
+            <td>@book.Genre</td>
+            <td>@book.Author</td>
+
+            <td style="text-align:center"><button type="button" class="AddToBasket" value="@book.BookID">Add</button></td>
+        </tr>
+    }
+</table>
+
+<div><h3>Discounted Books</h3><br /></div>
+<table class="table table-bordered table-hover table-striped" style="width:100%">
+    <tr>
+        <th scope="col">Book ID </th>
+        <th scope="col">Book Name </th>
+        <th scope="col">Year </th>
+        <th scope="col">Price</th>
+        <th scope="col">Genre</th>
+        <th scope="col">Author</th>
+        <th scope="col">Discount Rate</th>
+        <th scope="col">Add To Basket?</th>
+    </tr>
+    @foreach (DiscountedBook discountedBooks in Model.DiscountedBooks)
+    {
+     <tr>
+        <td>@discountedBooks.BookID</td>
+        <td>@discountedBooks.BookName</td>
+        <td>@discountedBooks.Year</td>
+        <td>£@discountedBooks.Price</td>
+        <td>@discountedBooks.Genre</td>
+        <td>@discountedBooks.Author</td>
+        <td>@discountedBooks.DiscountRate%</td>
+        <td style="text-align:center">
+        <button type="button" class="AddToBasket" value="@discountedBooks.BookID">Add</button>
+           
+        </td>
+        </tr>
+       }
+</table>
+
+<div style="width:100%;"><h3>Your Basket Total: <i id="totalFigures"> £0.00 </i> </h3> </div>
+
+<table class="table table-bordered table-hover table-striped" style="width:100%" id="basketTable">
+    <tr>
+        <th scope="col">Book ID </th>
+        <th scope="col">Book Name </th>
+        <th scope="col">Price</th>
+        <th scope="col" style="display:none" id="removeHeader">Remove?</th>
+
+    </tr>
+    <tr>
+        <td></td>
+        <td></td>
+        <td></td>
+
+    </tr>   
+</table>
+
+
+<script>
+    $(function () {
+        var valueList = [];
+        var bookValue = 0;
+        var detectIfAlreadyInBasket = [];
+
+        $('.AddToBasket').on('click', function () {
+            if (detectIfAlreadyInBasket.includes($(this).val())) {
+                alert("This book already exists in your basket!")
+            } else {
+                detectIfAlreadyInBasket.push($(this).val());
+
+                $.ajax({
+                    url: '@Url.Action("AddToBasket")',
+                    type: 'POST',
+                    contentType: "application/json; charset=utf-8",
+                    dataType: 'json',
+                    data: JSON.stringify({ BookID: $(this).val() }),
+                    success: function (data) {
+                        // grab our data from c# controller
+                        var bookInformation = data.message
+                        var bookInformationSplit = bookInformation.split("#]");
+                        var getBookId = bookInformationSplit[0];
+                        var getBookName = bookInformationSplit[1];
+                        var getBookPrice = bookInformationSplit[2];
+                        var getDiscount = bookInformationSplit[3];
+
+                        // adds book that the user has selected to the new table
+                        var table = $('#basketTable')[0];
+                        var row = table.insertRow(1);
+                        row.id = getBookId;
+                        var cell0 = row.insertCell(0);
+                        var cell1 = row.insertCell(1);
+                        var cell2 = row.insertCell(2);
+                        var cell3 = row.insertCell(3);
+
+                        // display the delete header once a successful addition is made
+                        $('#removeHeader')[0].style.display = "block";
+
+                        // calculate our basket total
+                        var totalValue = $('#totalFigures')[0];
+
+                        // assign price to new variable
+                        bookValue = + (getBookPrice);
+
+                        // apply discount
+                        if (getDiscount != "") {
+                            const convertDiscount = (getDiscount / 100).toFixed(2);
+                            let getDiscountValue = (bookValue * convertDiscount);
+                            bookValue = parseFloat((bookValue - getDiscountValue), 10).toFixed(2);
+                        }
+
+                        // set the content of the new rows
+                        cell0.innerHTML = getBookId;
+                        cell1.innerHTML = getBookName;
+                        cell2.innerHTML = "£" + Math.round(bookValue * 100) / 100;
+                        cell2.id = "priceCell"
+              
+                        // push price to total values array and sum the array so we have total basket price
+                        valueList.push(parseFloat(bookValue,10));
+                        var sum = valueList.reduce(function (a, b) {
+                            return a + b;
+                        }, 0);
+
+                        // ajax call that checks for basket total discounts.
+                        $.ajax({
+                            url: '@Url.Action("CheckForTotalDiscount")',
+                            type: 'POST',
+                            contentType: "application/json; charset=utf-8",
+                            dataType: 'json',
+                            data: JSON.stringify({ BasketPrice: sum }),
+                            success: function (data) {
+                                var discount = data.message
+                                // convert our basket discount
+                                var convertDiscount = (discount / 100).toFixed(2);
+                                var getTotalDiscount = Math.round(sum * 100) / 100 * convertDiscount;
+                                sum = Math.round(sum * 100) / 100 - getTotalDiscount;
+ 
+                                // display total price of purchased books
+                                totalValue.innerHTML = "£" + Math.round(sum * 100) / 100;
+                            },
+                            error: function (request, status, error) {
+                                alert(request.responseText);
+                            }
+                        });
+
+                        // create markup and functionality of the remove from basket button
+                        cell3.innerHTML = "<button id='btnDelete' value='" + getBookId + "'>Delete</button>";
+                        cell3.id = "deleteCell";
+                        $('#deleteCell')[0].style.textAlign = "center";
+
+                        $('#btnDelete')[0].onclick = function (event) {
+                            // loop that detects index of the book id and then splices
+                            for (var i = detectIfAlreadyInBasket.length - 1; i >= 0; i--) {
+                                if (detectIfAlreadyInBasket[i] === $(this).val()) {
+                                    detectIfAlreadyInBasket.splice(i, 1);
+                                }
+                            }
+                            // get price cell value
+                            let grabCellValue = $(this).closest('tr').find('#priceCell').text();
+                            let removeCurrencySymbol = grabCellValue.substring(1);
+                                                     
+                            // remove currency symbols                   
+                            for (var i = valueList.length - 1; i >= 0; i--) {
+                                if (valueList[i] == removeCurrencySymbol) {
+                                    valueList.splice(i, 1);
+                                }
+                            }
+
+                            // remove the row who's id we are on
+                            $('table#basketTable tr#' + getBookId + '').remove();
+
+                            var newSumArr = [];
+                            var grabBasketValue = totalValue.innerText;
+                            var newSum = grabBasketValue.substring(1);
+                            // handle the value if discount is applied by iterating through the columns and summing.
+                            if (newSum <= 30) {
+                                $("#basketTable tr:gt(0)").each(function () {
+                                    var this_row = $(this); // grab row click
+                                    var productId = $.trim(this_row.find('td:eq(2)').html()); // grab the price column values
+                                    productId = productId.replace('£', ''); // remove £
+                                    newSumArr.push(parseFloat(productId,10)); // push the values into an array                                                                   
+                                });
+
+                                // remove any NaN from array
+                                const newArray = newSumArr.filter(function (value) { 
+                                    return !Number.isNaN(value);
+                                });
+
+                                // sum the array to get the correct basket value post discount
+                                var calculatepostDiscount = newArray.reduce(function (a, b) {
+                                    return a + b;
+                                }, 0);
+
+                                // apply to label
+                                totalValue.innerHTML = "£" + (calculatepostDiscount).toFixed(2);
+                            } else { // operate normally
+                                totalValue.innerHTML = "£" + (newSum - removeCurrencySymbol).toFixed(2);
+                            }
+                        }; 
+                    },
+                    error: function (request, status, error) {
+                        alert(request.responseText);
+                    }
+                });
+            }
+        });  
+    });
+</script>
